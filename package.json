@@ -19,7 +19,9 @@
   },
   "homepage": "https://github.com/RomanBaukin/EarthquakeGeorgiaAlertBot#readme",
   "dependencies": {
+    "axios": "^1.2.1",
     "dotenv": "^16.0.3",
+    "jsdom": "^20.0.3",
     "telegraf": "^4.11.2"
   },
   "devDependencies": {
