@@ -1,0 +1,30 @@
+{
+  "name": "earthquakegeorgiaalertbot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RomanBaukin/EarthquakeGeorgiaAlertBot.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/RomanBaukin/EarthquakeGeorgiaAlertBot/issues"
+  },
+  "homepage": "https://github.com/RomanBaukin/EarthquakeGeorgiaAlertBot#readme",
+  "dependencies": {
+    "axios": "^1.2.1",
+    "dotenv": "^16.0.3",
+    "jsdom": "^20.0.3",
+    "telegraf": "^4.11.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.20"
+  }
+}
