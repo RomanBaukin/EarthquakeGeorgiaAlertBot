@@ -4,6 +4,7 @@ const {
 require('dotenv').config();
 const text = require('./const');
 const link = 'https://ies.iliauni.edu.ge/?page_id=183&lang=en';
+const chatID = -1001518239591;
 const axios = require('axios');
 const jsdom = require("jsdom");
 const {
@@ -32,8 +33,6 @@ axios.get(link, {
 
       earthquakes.push(tempObj);
     }
-
-    console.log(earthquakes);
   })
   .catch(function(error) {
     // handle error
@@ -62,3 +61,36 @@ function generationMessage(amountEarthquake) {
 
   return tempStr;
 }
+
+function checkLastEarthquake() {
+  axios.get(link, {
+      headers: {
+        "Accept-Encoding": "gzip,deflate,compress"
+      }
+    })
+    .then(function(response) {
+      // handle success
+      const dom = new JSDOM(response.data);
+      const table = dom.window.document.querySelector('.eartquakes-table tbody');
+
+      const lastEarthquake = {
+        time: table.childNodes[0].childNodes[0].textContent,
+        magnitude: table.childNodes[0].childNodes[1].textContent,
+        depth: table.childNodes[0].childNodes[3].textContent,
+        coordinates: table.childNodes[0].childNodes[4].textContent,
+        region: table.childNodes[0].childNodes[5].textContent
+      };
+
+      if (lastEarthquake.time !== earthquakes[0].time) {
+        const tempStr = `Новое землетрясение!!!\n${lastEarthquake.time} | магнитуда ${lastEarthquake.magnitude} | глубина ${lastEarthquake.depth} | координаты ${lastEarthquake.coordinates} | регион ${lastEarthquake.region}`;
+        bot.telegram.sendMessage(chatID, tempStr);
+        earthquakes.shift(lastEarthquake);
+        earthquakes.pop();
+      }
+    })
+    .catch(function(error) {
+      // handle error
+      console.log(error);
+    })
+}
+setInterval(checkLastEarthquake, 60000);
