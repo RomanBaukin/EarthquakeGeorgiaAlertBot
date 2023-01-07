@@ -4,7 +4,7 @@ const {
 require('dotenv').config();
 const text = require('./const');
 const link = 'https://ies.iliauni.edu.ge/?page_id=183&lang=en';
-const chatID = -1001518239591;
+const chatID = -1001858418173;
 const axios = require('axios');
 const jsdom = require("jsdom");
 const {
