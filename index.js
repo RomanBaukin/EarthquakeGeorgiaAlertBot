@@ -5,6 +5,7 @@ require('dotenv').config();
 const text = require('./const');
 const link = 'https://ies.iliauni.edu.ge/?page_id=183&lang=en';
 const chatID = -1001858418173;
+const chatIDLog = 201396033;
 const axios = require('axios');
 const jsdom = require("jsdom");
 const {
@@ -37,6 +38,7 @@ axios.get(link, {
   .catch(function(error) {
     // handle error
     console.log(error);
+    bot.telegram.sendMessage(chatIDLog, console.log(error));
   })
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -91,6 +93,7 @@ function checkLastEarthquake() {
     .catch(function(error) {
       // handle error
       console.log(error);
+      bot.telegram.sendMessage(chatIDLog, console.log(error));
     })
 }
 setInterval(checkLastEarthquake, 60000);
