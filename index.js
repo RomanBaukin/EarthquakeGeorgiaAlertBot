@@ -43,9 +43,9 @@ axios.get(link, {
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 bot.start((ctx) => ctx.reply(`Привет, ${ctx.message.from.first_name ? ctx.message.from.first_name : 'незнакомец'}!`));
-bot.command('behavior_during_earthquakes', (ctx) => ctx.reply(text.behaviorDuringEarthquakes));
-bot.command('5_recent_earthquakes', (ctx) => ctx.reply(generationMessage(5)));
-bot.command('10_recent_earthquakes', (ctx) => ctx.reply(generationMessage(10)));
+bot.command('behavior_during_earthquakes', async (ctx) => await ctx.reply(text.behaviorDuringEarthquakes));
+bot.command('5_recent_earthquakes', async (ctx) => await ctx.reply(generationMessage(5)));
+bot.command('10_recent_earthquakes', async (ctx) => await ctx.reply(generationMessage(10)));
 bot.help((ctx) => ctx.reply(text.commands));
 
 bot.launch();
