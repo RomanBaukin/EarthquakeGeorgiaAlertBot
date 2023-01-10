@@ -82,7 +82,7 @@ function checkLastEarthquake() {
       };
 
       if (lastEarthquake.time !== earthquakes[0].time) {
-        const tempStr = `Новое землетрясение!!!\n${lastEarthquake.time} | магнитуда ${lastEarthquake.magnitude} | глубина ${lastEarthquake.depth} | координаты ${lastEarthquake.coordinates} | регион ${lastEarthquake.region}`;
+        const tempStr = `❗️❗️❗️ Новое землетрясение ❗️❗️❗️\n\n${lastEarthquake.time} | магнитуда ${lastEarthquake.magnitude} | глубина ${lastEarthquake.depth} | координаты ${lastEarthquake.coordinates} | регион ${lastEarthquake.region}`;
         bot.telegram.sendMessage(chatID, tempStr);
         earthquakes.shift(lastEarthquake);
         earthquakes.pop();
