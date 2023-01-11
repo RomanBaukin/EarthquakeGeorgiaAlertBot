@@ -26,7 +26,7 @@ bot.launch();
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
-async function generationListEarthquakes() {
+function generationListEarthquakes() {
   axios.get(link, {
       headers: {
         "Accept-Encoding": "gzip,deflate,compress"
@@ -99,5 +99,7 @@ function checkLastEarthquake() {
     })
 }
 
-generationListEarthquakes();
+if (earthquakes.length === 0) {
+  generationListEarthquakes();
+}
 setInterval(checkLastEarthquake, 60000);
