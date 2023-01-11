@@ -58,7 +58,7 @@ function generationMessage(amountEarthquake) {
   let tempStr = `${amountEarthquake} последних землетрясений\n\n`;
 
   for (let i = 0; i < amountEarthquake; i++) {
-    tempStr += `${earthquakes[i].time} | магнитуда ${earthquakes[i].magnitude} | глубина ${earthquakes[i].depth} | координаты ${earthquakes[i].coordinates} | регион ${earthquakes[i].region}\n\n`;
+    tempStr += `${earthquakes[i].time} | магнитуда ${earthquakes[i].magnitude} | глубина ${earthquakes[i].depth} км | координаты ${earthquakes[i].coordinates} | регион ${earthquakes[i].region}\n\n`;
   }
 
   return tempStr;
@@ -84,7 +84,7 @@ function checkLastEarthquake() {
       };
 
       if (lastEarthquake.time !== earthquakes[0].time) {
-        const tempStr = `❗️❗️❗️ Новое землетрясение ❗️❗️❗️\n\n${lastEarthquake.time} | магнитуда ${lastEarthquake.magnitude} | глубина ${lastEarthquake.depth} | координаты ${lastEarthquake.coordinates} | регион ${lastEarthquake.region}`;
+        const tempStr = `❗️❗️❗️ Новое землетрясение ❗️❗️❗️\n\n${lastEarthquake.time} | магнитуда ${lastEarthquake.magnitude} | глубина ${lastEarthquake.depth} км | координаты ${lastEarthquake.coordinates} | регион ${lastEarthquake.region}`;
         bot.telegram.sendMessage(chatID, tempStr);
         earthquakes.shift(lastEarthquake);
         earthquakes.pop();
