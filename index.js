@@ -26,7 +26,7 @@ bot.launch();
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
-function generationListEarthquakes() {
+async function generationListEarthquakes() {
   axios.get(link, {
       headers: {
         "Accept-Encoding": "gzip,deflate,compress"
@@ -52,7 +52,6 @@ function generationListEarthquakes() {
     .catch(function(error) {
       // handle error
       console.log(error);
-      bot.telegram.sendMessage(chatIDLog, console.log(error));
     })
 }
 
@@ -85,7 +84,7 @@ function checkLastEarthquake() {
         region: table.childNodes[0].childNodes[5].textContent
       };
 
-      if (lastEarthquake.time !== earthquakes[0].time) {
+      if (earthquakes.length !== 0 && lastEarthquake.time !== earthquakes[0].time) {
         const tempStr = `❗️❗️❗️ Новое землетрясение ❗️❗️❗️\n\n${lastEarthquake.time} | магнитуда ${lastEarthquake.magnitude} | глубина ${lastEarthquake.depth} км | координаты ${lastEarthquake.coordinates} | регион ${lastEarthquake.region}`;
         bot.telegram.sendMessage(chatID, tempStr);
         earthquakes.shift(lastEarthquake);
@@ -95,7 +94,6 @@ function checkLastEarthquake() {
     .catch(function(error) {
       // handle error
       console.log(error);
-      bot.telegram.sendMessage(chatIDLog, console.log(error));
     })
 }
 
