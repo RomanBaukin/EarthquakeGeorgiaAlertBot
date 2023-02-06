@@ -100,4 +100,4 @@ function checkLastEarthquake() {
 if (earthquakes.length === 0) {
   generationListEarthquakes();
 }
-setInterval(checkLastEarthquake, 60000);
+setInterval(checkLastEarthquake, 300000);
