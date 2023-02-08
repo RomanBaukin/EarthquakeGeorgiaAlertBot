@@ -5,7 +5,7 @@ require('dotenv').config();
 const text = require('./const');
 const link = 'https://ies.iliauni.edu.ge/?page_id=183&lang=en';
 const chatID = -1001858418173;
-const chatIDLog = 201396033;
+const chatIDTEST = -1001776571440;
 const axios = require('axios');
 const jsdom = require("jsdom");
 const {
@@ -39,7 +39,7 @@ async function generationListEarthquakes() {
 
       for (let i = 0; i < 10; i++) {
         const tempObj = {
-          time: table.childNodes[i].childNodes[0].textContent,
+          time: changeTimeToLocal(table.childNodes[i].childNodes[0].textContent),
           magnitude: table.childNodes[i].childNodes[1].textContent,
           depth: table.childNodes[i].childNodes[3].textContent,
           coordinates: table.childNodes[i].childNodes[4].textContent,
@@ -59,7 +59,7 @@ function generationMessage(amountEarthquake) {
   let tempStr = `${amountEarthquake} последних землетрясений\n\n`;
 
   for (let i = 0; i < amountEarthquake; i++) {
-    tempStr += `${earthquakes[i].time} | магнитуда ${earthquakes[i].magnitude} | глубина ${earthquakes[i].depth} км | координаты ${earthquakes[i].coordinates} | регион ${earthquakes[i].region}\n\n`;
+    tempStr += `${i+1}. ${earthquakes[i].time}\n\n магнитуда ${earthquakes[i].magnitude} | глубина ${earthquakes[i].depth} км | координаты ${earthquakes[i].coordinates} | регион ${earthquakes[i].region}\n\n`;
   }
 
   return tempStr;
@@ -86,9 +86,8 @@ function checkLastEarthquake() {
 
       if (earthquakes.length !== 0 && lastEarthquake.time !== earthquakes[0].time) {
         const tempStr = `❗️❗️❗️ Новое землетрясение ❗️❗️❗️\n\n${lastEarthquake.time} | магнитуда ${lastEarthquake.magnitude} | глубина ${lastEarthquake.depth} км | координаты ${lastEarthquake.coordinates} | регион ${lastEarthquake.region}`;
-        bot.telegram.sendMessage(chatID, tempStr);
-        earthquakes.shift(lastEarthquake);
-        earthquakes.pop();
+        bot.telegram.sendMessage(chatIDTEST, tempStr);
+        generationListEarthquakes();
       }
     })
     .catch(function(error) {
@@ -97,7 +96,12 @@ function checkLastEarthquake() {
     })
 }
 
-if (earthquakes.length === 0) {
-  generationListEarthquakes();
+function changeTimeToLocal(time) {
+  const localTime = new Date(new Date(time).getTime() + 14400000);
+
+  return localTime.toString();
 }
-setInterval(checkLastEarthquake, 300000);
+
+generationListEarthquakes();
+
+setInterval(checkLastEarthquake, 60000);
