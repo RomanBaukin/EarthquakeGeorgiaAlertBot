@@ -59,7 +59,7 @@ function generationMessage(amountEarthquake) {
   let tempStr = `${amountEarthquake} последних землетрясений\n\n`;
 
   for (let i = 0; i < amountEarthquake; i++) {
-    tempStr += `${i+1}. ${earthquakes[i].time}\n\n магнитуда ${earthquakes[i].magnitude} | глубина ${earthquakes[i].depth} км | координаты ${earthquakes[i].coordinates} | регион ${earthquakes[i].region}\n\n`;
+    tempStr += `${i+1}. ${earthquakes[i].time}\n\n магнитуда ${earthquakes[i].magnitude} | глубина ${earthquakes[i].depth} км | координаты ${earthquakes[i].coordinates} | регион ${earthquakes[i].region}\n\n\n`;
   }
 
   return tempStr;
@@ -77,7 +77,7 @@ function checkLastEarthquake() {
       const table = dom.window.document.querySelector('.eartquakes-table tbody');
 
       const lastEarthquake = {
-        time: table.childNodes[0].childNodes[0].textContent,
+        time: changeTimeToLocal(table.childNodes[0].childNodes[0].textContent),
         magnitude: table.childNodes[0].childNodes[1].textContent,
         depth: table.childNodes[0].childNodes[3].textContent,
         coordinates: table.childNodes[0].childNodes[4].textContent,
