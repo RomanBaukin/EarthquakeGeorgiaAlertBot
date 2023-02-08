@@ -99,7 +99,7 @@ function checkLastEarthquake() {
 function changeTimeToLocal(time) {
   const localTime = new Date(new Date(time).getTime() + 14400000);
 
-  return localTime.toString();
+  return localTime.toString().slice(0, 24);
 }
 
 generationListEarthquakes();
