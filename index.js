@@ -11,8 +11,8 @@ const jsdom = require("jsdom");
 const {
   JSDOM
 } = jsdom;
-const earthquakes = [];
 const bot = new Telegraf(process.env.BOT_TOKEN);
+let earthquakes = [];
 
 bot.start((ctx) => ctx.reply(`Привет, ${ctx.message.from.first_name ? ctx.message.from.first_name : 'незнакомец'}!`));
 bot.command('behavior_during_earthquakes', async (ctx) => await ctx.reply(text.behaviorDuringEarthquakes));
@@ -36,6 +36,8 @@ async function generationListEarthquakes() {
       // handle success
       const dom = new JSDOM(response.data);
       const table = dom.window.document.querySelector('.eartquakes-table tbody');
+
+      earthquakes = [];
 
       for (let i = 0; i < 10; i++) {
         const tempObj = {
