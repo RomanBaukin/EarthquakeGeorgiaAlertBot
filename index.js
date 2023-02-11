@@ -87,6 +87,8 @@ function checkLastEarthquake() {
       if (earthquakes.length !== 0 && lastEarthquake.time !== earthquakes[0].time) {
         const tempStr = `❗️❗️❗️ Новое землетрясение ❗️❗️❗️\n\n${lastEarthquake.time}\n\nмагнитуда ${lastEarthquake.magnitude} | глубина ${lastEarthquake.depth} км | координаты ${lastEarthquake.coordinates} | регион ${lastEarthquake.region}`;
         bot.telegram.sendMessage(chatIDTEST, tempStr);
+        bot.telegram.sendMessage(chatIDTEST, console.log(lastEarthquake.time, earthquakes[0].time));
+        console.log(lastEarthquake.time, earthquakes[0].time);
         generationListEarthquakes();
       }
     })
