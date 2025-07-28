@@ -27,80 +27,93 @@ process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
 async function generationListEarthquakes() {
-  axios.get(link, {
+  try {
+    const response = await axios.get(link, {
       headers: {
         "Accept-Encoding": "gzip,deflate,compress"
       }
-    })
-    .then(function(response) {
-      // handle success
-      const dom = new JSDOM(response.data);
-      const table = dom.window.document.querySelector('.eartquakes-table tbody');
+    });
+    const dom = new JSDOM(response.data);
+    const table = dom.window.document.querySelector('.eartquakes-table tbody');
 
-      earthquakes = [];
+    earthquakes = [];
 
-      for (let i = 0; i < 10; i++) {
-        const tempObj = {
-          time: changeTimeToLocal(table.childNodes[i].childNodes[0].textContent),
-          magnitude: table.childNodes[i].childNodes[1].textContent,
-          depth: table.childNodes[i].childNodes[3].textContent,
-          coordinates: table.childNodes[i].childNodes[4].textContent,
-          region: table.childNodes[i].childNodes[5].textContent
-        };
+    if (!table || !table.childNodes || table.childNodes.length === 0) {
+      console.log('Table or rows not found');
+      return;
+    }
 
-        earthquakes.push(tempObj);
-      }
-    })
-    .catch(function(error) {
-      // handle error
-      console.log(error);
-    })
+    for (let i = 0; i < Math.min(10, table.childNodes.length); i++) {
+      const row = table.childNodes[i];
+      if (!row || !row.childNodes || row.childNodes.length < 6) continue;
+      const tempObj = {
+        time: changeTimeToLocal(row.childNodes[0].textContent),
+        magnitude: row.childNodes[1].textContent,
+        depth: row.childNodes[3].textContent,
+        coordinates: row.childNodes[4].textContent,
+        region: row.childNodes[5].textContent
+      };
+      earthquakes.push(tempObj);
+    }
+  } catch (error) {
+    console.log(error);
+  }
 }
 
 function generationMessage(amountEarthquake) {
   let tempStr = `${amountEarthquake} последних землетрясений\n\n`;
-
+  if (!earthquakes || earthquakes.length === 0) {
+    tempStr += 'Нет данных о землетрясениях.';
+    return tempStr;
+  }
   for (let i = 0; i < amountEarthquake; i++) {
+    if (!earthquakes[i]) break;
     tempStr += `${i+1}. ${earthquakes[i].time}\n\nмагнитуда ${earthquakes[i].magnitude} | глубина ${earthquakes[i].depth} км | координаты ${earthquakes[i].coordinates} | регион ${earthquakes[i].region}\n\n\n`;
   }
-
   return tempStr;
 }
 
-function checkLastEarthquake() {
-  axios.get(link, {
+async function checkLastEarthquake() {
+  try {
+    const response = await axios.get(link, {
       headers: {
         "Accept-Encoding": "gzip,deflate,compress"
       }
-    })
-    .then(function(response) {
-      // handle success
-      const dom = new JSDOM(response.data);
-      const table = dom.window.document.querySelector('.eartquakes-table tbody');
-
-      const lastEarthquake = {
-        time: changeTimeToLocal(table.childNodes[0].childNodes[0].textContent),
-        magnitude: table.childNodes[0].childNodes[1].textContent,
-        depth: table.childNodes[0].childNodes[3].textContent,
-        coordinates: table.childNodes[0].childNodes[4].textContent,
-        region: table.childNodes[0].childNodes[5].textContent
-      };
-
-      if (earthquakes.length !== 0 && lastEarthquake.time !== earthquakes[0].time) {
-        const tempStr = `❗️❗️❗️ Новое землетрясение ❗️❗️❗️\n\n${lastEarthquake.time}\n\nмагнитуда ${lastEarthquake.magnitude} | глубина ${lastEarthquake.depth} км | координаты ${lastEarthquake.coordinates} | регион ${lastEarthquake.region}`;
-        bot.telegram.sendMessage(chatID, tempStr);
-        generationListEarthquakes();
+    });
+    const dom = new JSDOM(response.data);
+    const table = dom.window.document.querySelector('.eartquakes-table tbody');
+    if (!table || !table.childNodes || table.childNodes.length === 0) {
+      console.log('Table or rows not found');
+      return;
+    }
+    const row = table.childNodes[0];
+    if (!row || !row.childNodes || row.childNodes.length < 6) return;
+    const lastEarthquake = {
+      time: changeTimeToLocal(row.childNodes[0].textContent),
+      magnitude: row.childNodes[1].textContent,
+      depth: row.childNodes[3].textContent,
+      coordinates: row.childNodes[4].textContent,
+      region: row.childNodes[5].textContent
+    };
+    if (earthquakes.length !== 0 && lastEarthquake.time !== earthquakes[0].time) {
+      const tempStr = `❗️❗️❗️ Новое землетрясение ❗️❗️❗️\n\n${lastEarthquake.time}\n\nмагнитуда ${lastEarthquake.magnitude} | глубина ${lastEarthquake.depth} км | координаты ${lastEarthquake.coordinates} | регион ${lastEarthquake.region}`;
+      try {
+        await bot.telegram.sendMessage(chatID, tempStr);
+      } catch (sendError) {
+        console.error('Ошибка при отправке сообщения в Telegram:', sendError);
       }
-    })
-    .catch(function(error) {
-      // handle error
-      console.log(error);
-    })
+      await generationListEarthquakes();
+    }
+  } catch (error) {
+    console.log(error);
+  }
 }
 
 function changeTimeToLocal(time) {
-  const localTime = new Date(new Date(time).getTime() + 14400000);
-
+  if (!time) return 'Некорректное время';
+  const date = new Date(time);
+  if (isNaN(date.getTime())) return 'Некорректное время';
+  const localTime = new Date(date.getTime() + 14400000);
   return localTime.toString().slice(0, 24);
 }
 
