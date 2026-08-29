@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatTbilisi, parseSourceTime } from "./time";
+import { formatTbilisi, isEventStale, parseSourceTime } from "./time";
 
 describe("parseSourceTime", () => {
   it("парсит формат источника как UTC", () => {
@@ -27,5 +27,22 @@ describe("formatTbilisi", () => {
 
   it("корректно переносит дату через полночь", () => {
     expect(formatTbilisi("2026-08-28T21:30:00.000Z")).toBe("29.08.2026, 01:30");
+  });
+});
+
+describe("isEventStale", () => {
+  const maxAgeMs = 6 * 60 * 60 * 1000;
+  const nowMs = new Date("2026-08-29T12:00:00.000Z").getTime();
+
+  it("считает событие свежим в пределах порога", () => {
+    expect(isEventStale("2026-08-29T08:00:00.000Z", maxAgeMs, nowMs)).toBe(false);
+  });
+
+  it("считает событие устаревшим за пределами порога", () => {
+    expect(isEventStale("2026-08-29T05:00:00.000Z", maxAgeMs, nowMs)).toBe(true);
+  });
+
+  it("граница ровно на пороге не считается устаревшей", () => {
+    expect(isEventStale("2026-08-29T06:00:00.000Z", maxAgeMs, nowMs)).toBe(false);
   });
 });

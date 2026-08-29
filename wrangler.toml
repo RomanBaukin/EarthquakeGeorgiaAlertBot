@@ -14,3 +14,6 @@ migrations_dir = "migrations"
 
 [vars]
 SOURCE_URL = "https://ies.iliauni.edu.ge/?page_id=183&lang=en"
+
+[observability]
+enabled = true

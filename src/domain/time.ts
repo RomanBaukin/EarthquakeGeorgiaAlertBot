@@ -27,3 +27,7 @@ export function parseSourceTime(raw: string): string | null {
 export function formatTbilisi(isoUtc: string): string {
   return TBILISI_FORMATTER.format(new Date(isoUtc));
 }
+
+export function isEventStale(sourceTimeIso: string, maxAgeMs: number, nowMs: number): boolean {
+  return nowMs - new Date(sourceTimeIso).getTime() > maxAgeMs;
+}

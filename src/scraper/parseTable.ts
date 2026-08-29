@@ -7,7 +7,40 @@ export { ScrapeError } from "./types";
 export type { ParsedEarthquake } from "./types";
 
 const TABLE_SELECTOR = "table.eartquakes-table";
+const TABLE_CLASS_MARKER = "eartquakes-table";
 const EVENT_ID_PATTERN = /[?&]id=(\d+)/;
+
+// Живая страница — 65 КБ, а нужная таблица — ~10 КБ; cheerio.load всей страницы
+// на холодном изоляте съедает CPU-лимит free-плана Cloudflare (~10 мс). Вырезаем
+// фрагмент до парсинга; если разметка не совпала с ожиданиями — отдаём html как есть,
+// и парсинг просто деградирует до прежнего (более дорогого) поведения, а не падает.
+//
+// Нельзя просто искать первое вхождение TABLE_CLASS_MARKER в html: на живой странице
+// оно сперва встречается в <style>-блоке (CSS-селекторы вида "table.eartquakes-table
+// td:nth-child(1)"), который стоит перед самой таблицей и не содержит закрывающего
+// </table> рядом — так фрагмент вырезался бы неверно. Поэтому проверяем именно
+// открывающий тег <table ...>, а не первое вхождение маркера где угодно в документе.
+function extractTableFragment(html: string): string {
+  let searchFrom = 0;
+
+  while (true) {
+    const tableStart = html.indexOf("<table", searchFrom);
+    if (tableStart === -1) return html;
+
+    const tagEnd = html.indexOf(">", tableStart);
+    if (tagEnd === -1) return html;
+
+    const openTag = html.slice(tableStart, tagEnd + 1);
+    if (openTag.includes(TABLE_CLASS_MARKER)) {
+      const closeTag = "</table>";
+      const closeIndex = html.indexOf(closeTag, tagEnd);
+      if (closeIndex === -1) return html;
+      return html.slice(tableStart, closeIndex + closeTag.length);
+    }
+
+    searchFrom = tagEnd + 1;
+  }
+}
 
 const COLUMNS = {
   time: "time(utc)",
@@ -22,7 +55,7 @@ function normalizeHeader(text: string): string {
 }
 
 export function parseEarthquakesTable(html: string): ParsedEarthquake[] {
-  const $ = cheerio.load(html);
+  const $ = cheerio.load(extractTableFragment(html));
   const table = $(TABLE_SELECTOR).first();
   if (table.length === 0) {
     throw new ScrapeError(`Таблица ${TABLE_SELECTOR} не найдена на странице`);

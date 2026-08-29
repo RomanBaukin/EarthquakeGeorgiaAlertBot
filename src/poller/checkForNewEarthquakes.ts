@@ -8,11 +8,16 @@ import {
   markAllPendingNotified,
   markNotified,
 } from "../db/repositories/earthquakeRepository";
+import { isEventStale } from "../domain/time";
 import { fetchEarthquakesPage } from "../scraper/fetchPage";
 import { parseEarthquakesTable } from "../scraper/parseTable";
 import { dispatchAlerts } from "./alertDispatcher";
 
 const MAX_ALERTS_PER_RUN = 5;
+// Второй рубеж обороны после проверки countEvents === 0: если часть back-catalog
+// уже вставлена, но тик убит до markAllPendingNotified (нет транзакций в D1),
+// следующий тик не увидит холодный старт — но всё равно не разошлёт события старше порога.
+const MAX_ALERT_AGE_MS = 6 * 60 * 60 * 1000;
 
 export async function checkForNewEarthquakes(
   env: Env,
@@ -38,6 +43,11 @@ export async function checkForNewEarthquakes(
 
   let alerted = 0;
   for (const event of pending) {
+    if (isEventStale(event.source_time, MAX_ALERT_AGE_MS, Date.now())) {
+      await markNotified(db, event.id);
+      continue;
+    }
+
     alerted += await dispatchAlerts(bot, db, event);
     await markNotified(db, event.id);
   }
