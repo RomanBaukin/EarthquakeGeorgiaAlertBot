@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ScrapeError, parseEarthquakesTable } from "./parseTable";
 
 const fixture = readFileSync(
-  fileURLToPath(new URL("./fixtures/sample-page.html", import.meta.url)),
+  join(dirname(fileURLToPath(import.meta.url)), "fixtures", "sample-page.html"),
   "utf8",
 );
 
