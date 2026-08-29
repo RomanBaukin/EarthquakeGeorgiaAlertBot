@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import type { CheerioAPI } from "cheerio";
 import { parseCoordinates } from "../domain/geo";
 import { parseSourceTime } from "../domain/time";
 import { ScrapeError, type ParsedEarthquake } from "./types";
@@ -50,34 +51,92 @@ const COLUMNS = {
   region: "region",
 } as const;
 
+type ColumnIndex = Record<keyof typeof COLUMNS, number>;
+
 function normalizeHeader(text: string): string {
   return text.replace(/\s+/g, "").toLowerCase();
 }
 
-export function parseEarthquakesTable(html: string): ParsedEarthquake[] {
-  const $ = cheerio.load(extractTableFragment(html));
-  const table = $(TABLE_SELECTOR).first();
-  if (table.length === 0) {
-    throw new ScrapeError(`Таблица ${TABLE_SELECTOR} не найдена на странице`);
+function resolveColumnIndex(headerIndex: Map<string, number>): ColumnIndex | null {
+  const columnIndex: ColumnIndex = {} as never;
+  for (const [key, header] of Object.entries(COLUMNS)) {
+    const index = headerIndex.get(header);
+    if (index === undefined) return null;
+    columnIndex[key as keyof typeof COLUMNS] = index;
   }
+  return columnIndex;
+}
+
+// Общая точка для основного разбора и для самопроверки вырезанного фрагмента —
+// логика сопоставления колонок по заголовкам не должна дублироваться между ними.
+function locateTable($: CheerioAPI) {
+  const table = $(TABLE_SELECTOR).first();
+  if (table.length === 0) return null;
 
   const headerIndex = new Map<string, number>();
   table.find("thead th").each((index, element) => {
     headerIndex.set(normalizeHeader($(element).text()), index);
   });
 
-  const columnIndex: Record<keyof typeof COLUMNS, number> = {} as never;
-  for (const [key, header] of Object.entries(COLUMNS)) {
-    const index = headerIndex.get(header);
-    if (index === undefined) {
-      throw new ScrapeError(`В таблице нет обязательной колонки "${header}"`);
-    }
-    columnIndex[key as keyof typeof COLUMNS] = index;
+  const columnIndex = resolveColumnIndex(headerIndex);
+  if (columnIndex === null) return null;
+
+  // Строки собираем один раз здесь: их же переиспользуют и самопроверка фрагмента,
+  // и основной цикл разбора — так DOM не обходится по "tbody tr" дважды.
+  const rows = table.find("tbody tr");
+
+  return { table, columnIndex, rows };
+}
+
+type LocatedTable = NonNullable<ReturnType<typeof locateTable>>;
+
+function countOccurrences(text: string, needle: string): number {
+  let count = 0;
+  let from = 0;
+  for (;;) {
+    const index = text.indexOf(needle, from);
+    if (index === -1) return count;
+    count += 1;
+    from = index + needle.length;
+  }
+}
+
+// Заголовки и хотя бы одна строка ловят подставные/пустые фрагменты (закомментированная
+// таблица-приманка с тем же классом, шаблон таблицы внутри <script>), но не ловят частичную
+// потерю данных: если внутри среза оказалась чужая вложенная <table>, наша нарезка обрывается
+// на ЕЁ закрывающем теге, и настоящая таблица остаётся незакрытой — часть настоящих строк
+// после вложенной таблицы молча теряется, хотя строки перед ней выглядят валидными.
+// Проверка баланса <table>/</table> ловит именно это, не пытаясь распознавать сами вложенные
+// таблицы: если разметка вложенной таблицы полностью попала в срез, теги останутся
+// сбалансированы; если срез оборвался на её закрывающем теге — не сойдётся.
+function isFragmentTrustworthy(fragment: string, located: LocatedTable | null): boolean {
+  if (countOccurrences(fragment, "<table") !== countOccurrences(fragment, "</table>")) {
+    return false;
   }
 
+  return located !== null && located.rows.length > 0;
+}
+
+export function parseEarthquakesTable(html: string): ParsedEarthquake[] {
+  const fragment = extractTableFragment(html);
+
+  let $ = cheerio.load(fragment);
+  let located = locateTable($);
+
+  const useFragment = fragment !== html && isFragmentTrustworthy(fragment, located);
+  if (!useFragment && fragment !== html) {
+    $ = cheerio.load(html);
+    located = locateTable($);
+  }
+
+  if (located === null) {
+    throw new ScrapeError(`Таблица ${TABLE_SELECTOR} не найдена или в ней нет обязательных колонок`);
+  }
+
+  const { columnIndex, rows } = located;
   const events: ParsedEarthquake[] = [];
 
-  table.find("tbody tr").each((_, row) => {
+  rows.each((_, row) => {
     const cells = $(row).find("td");
     const cellText = (index: number): string => cells.eq(index).text().trim();
 

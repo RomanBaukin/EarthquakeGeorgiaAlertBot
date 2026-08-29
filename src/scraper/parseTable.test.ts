@@ -63,4 +63,36 @@ describe("parseEarthquakesTable", () => {
     const broken = fixture.replace("<th > Magnitude(ml)</th>", "<th > Foo</th>");
     expect(() => parseEarthquakesTable(broken)).toThrow(ScrapeError);
   });
+
+  it("игнорирует закомментированную таблицу-приманку с тем же классом перед настоящей", () => {
+    const withDecoy = fixture.replace(
+      "<body>",
+      `<body>\r\n<!-- <table class="eartquakes-table"><tbody><tr><td>предпросмотр</td></tr></tbody></table> -->\r\n`,
+    );
+    expect(withDecoy).not.toBe(fixture);
+    expect(parseEarthquakesTable(withDecoy)).toEqual(parseEarthquakesTable(fixture));
+  });
+
+  it("игнорирует шаблон таблицы внутри строкового литерала в script", () => {
+    const withScript = fixture.replace(
+      "<body>",
+      `<body>\r\n<script>var preview = '<table class="eartquakes-table"><tbody><tr><td>Loading...</td></tr></tbody></table>';</script>\r\n`,
+    );
+    expect(withScript).not.toBe(fixture);
+    expect(parseEarthquakesTable(withScript)).toEqual(parseEarthquakesTable(fixture));
+  });
+
+  it("не теряет строки после вложенной <table> внутри tbody настоящей таблицы", () => {
+    // Вложенная таблица-виджет лежит в <td> отдельной строки-обёртки — валидный HTML
+    // (в отличие от <table> напрямую внутри <tbody>, которая браузер/htmlparser2 сам
+    // переносит за пределы таблицы независимо от нашей нарезки). Наивная нарезка по
+    // первому "</table>" после начала настоящей таблицы всё равно обрежется на закрывающем
+    // теге вложенной таблицы, до того как встретится настоящий конец таблицы.
+    const withNestedTable = fixture.replace(
+      "</tr>\r\n<tr><td ><a href='https://ies.iliauni.edu.ge/?page_id=183&lang=en&id=587522&'>",
+      "</tr>\r\n<tr><td colspan=\"7\"><table><tbody><tr><td>виджет</td></tr></tbody></table></td></tr>\r\n<tr><td ><a href='https://ies.iliauni.edu.ge/?page_id=183&lang=en&id=587522&'>",
+    );
+    expect(withNestedTable).not.toBe(fixture);
+    expect(parseEarthquakesTable(withNestedTable)).toEqual(parseEarthquakesTable(fixture));
+  });
 });
