@@ -4,12 +4,20 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ScrapeError, parseEarthquakesTable } from "./parseTable";
 
-const fixture = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "fixtures", "sample-page.html"),
-  "utf8",
-);
+const here = dirname(fileURLToPath(import.meta.url));
+
+const fixture = readFileSync(join(here, "fixtures", "sample-page.html"), "utf8");
 
 describe("parseEarthquakesTable", () => {
+  // Cron тикает раз в минуту на free-плане с лимитом ~10мс CPU. Инициализация cheerio
+  // на холодном изоляте сама по себе съедала весь бюджет (outcome: exceededCpu на
+  // каждом тике), независимо от размера входа — поэтому разбор обязан оставаться
+  // на ручном сканере без DOM-библиотеки.
+  it("не тянет DOM-библиотеку: разбор укладывается в CPU-бюджет free-плана", () => {
+    const source = readFileSync(join(here, "parseTable.ts"), "utf8");
+    expect(source).not.toMatch(/from ["']cheerio["']/);
+  });
+
   it("парсит валидные строки и пропускает битые", () => {
     const rows = parseEarthquakesTable(fixture);
     expect(rows).toHaveLength(3);
