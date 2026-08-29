@@ -32,7 +32,14 @@ export async function dispatchAlerts(
       });
       delivered += 1;
     } catch (error) {
-      if (error instanceof GrammyError && (error.error_code === 403 || error.error_code === 400)) {
+      const isUnreachableChat =
+        error instanceof GrammyError &&
+        (error.error_code === 403 ||
+          (error.error_code === 400 &&
+            (error.description.toLowerCase().includes("chat not found") ||
+              error.description.toLowerCase().includes("group chat was upgraded"))));
+
+      if (isUnreachableChat) {
         await setSubscriptionActive(db, subscription.chat_id, false);
         console.warn(`Подписка чата ${subscription.chat_id} отключена: ${error.description}`);
       } else {

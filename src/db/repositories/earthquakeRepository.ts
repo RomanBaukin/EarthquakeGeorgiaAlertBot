@@ -63,6 +63,14 @@ export async function markNotified(db: Db, id: number): Promise<void> {
     .execute();
 }
 
+export async function markAllPendingNotified(db: Db): Promise<void> {
+  await db
+    .updateTable("earthquake_event")
+    .set({ notified_at: new Date().toISOString() })
+    .where("notified_at", "is", null)
+    .execute();
+}
+
 export async function countEvents(db: Db): Promise<number> {
   const row = await db
     .selectFrom("earthquake_event")

@@ -5,6 +5,7 @@ import {
   countEvents,
   insertIfNew,
   listPendingAlerts,
+  markAllPendingNotified,
   markNotified,
 } from "../db/repositories/earthquakeRepository";
 import { fetchEarthquakesPage } from "../scraper/fetchPage";
@@ -27,15 +28,13 @@ export async function checkForNewEarthquakes(
     if (await insertIfNew(db, event)) inserted += 1;
   }
 
-  const pending = await listPendingAlerts(db, MAX_ALERTS_PER_RUN);
-
   if (isColdStart) {
-    for (const event of pending) await markNotified(db, event.id);
+    await markAllPendingNotified(db);
     return { inserted, alerted: 0 };
   }
 
+  const pending = await listPendingAlerts(db, MAX_ALERTS_PER_RUN);
   const bot = createBot(env);
-  await bot.init();
 
   let alerted = 0;
   for (const event of pending) {
