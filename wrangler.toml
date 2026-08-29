@@ -9,7 +9,7 @@ crons = ["* * * * *"]
 [[d1_databases]]
 binding = "DB"
 database_name = "earthquake-bot"
-database_id = "REPLACE_WITH_REAL_DATABASE_ID"
+database_id = "0503e29e-1f47-43c0-84d6-dc3e88beb5a1"
 migrations_dir = "migrations"
 
 [vars]
