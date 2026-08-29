@@ -33,7 +33,7 @@ describe("alertMessage", () => {
 
 describe("recentListMessage", () => {
   it("сообщает об отсутствии данных на пустом списке", () => {
-    expect(recentListMessage([], 5)).toContain("пока нет данных");
+    expect(recentListMessage([], 5)).toContain("нет данных о землетрясениях");
   });
 
   it("нумерует события", () => {

@@ -41,7 +41,7 @@ export function alertMessage(event: EarthquakeLike): string {
 
 export function recentListMessage(events: EarthquakeLike[], requested: number): string {
   if (events.length === 0) {
-    return "пока нет данных о землетрясениях — как только появятся, покажу их здесь.";
+    return "Пока нет данных о землетрясениях — как только появятся, покажу их здесь.";
   }
 
   const body = events
