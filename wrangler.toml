@@ -1,0 +1,19 @@
+name = "earthquake-georgia-alert-bot"
+main = "src/worker.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "earthquake-bot"
+database_id = "REPLACE_WITH_REAL_DATABASE_ID"
+migrations_dir = "migrations"
+
+[vars]
+SOURCE_URL = "https://ies.iliauni.edu.ge/?page_id=183&lang=en"
+
+[observability]
+enabled = true

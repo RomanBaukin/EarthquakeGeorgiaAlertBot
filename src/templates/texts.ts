@@ -1,12 +1,19 @@
-const commands = `
-/start - Перезапустить бота
-/5_recent_earthquakes - 5 последних землетрясений в Грузии
-/10_recent_earthquakes - 10 последних землетрясений в Грузии
-/behavior_during_earthquakes - поведение во время землетрясений
-/help - возможности бота
-`;
-const behaviorDuringEarthquakes = `
-Правила поведения во время землетрясений:
+export const texts = {
+  greeting: (name: string): string =>
+    `Привет, ${name}!\n\nЯ слежу за землетрясениями в Грузии и пришлю уведомление, когда произойдёт новое.\n\nОткрой меню кнопками ниже или используй /help.`,
+
+  menuPrompt: "Главное меню:",
+
+  commands: `Возможности бота:
+
+/menu - главное меню с кнопками
+/recent - последние землетрясения
+/stats - статистика за неделю и месяц
+/settings - настройки уведомлений
+/behavior - правила поведения во время землетрясений
+/help - это сообщение`,
+
+  behaviorDuringEarthquakes: `Правила поведения во время землетрясений:
 
 - Выключите газ, воду и электричество.
 
@@ -25,8 +32,5 @@ const behaviorDuringEarthquakes = `
   • оборванные электропровода;
   • падение тяжелых предметов в квартире;
   • пожары;
-  • неконтролируемое поведение людей при панике.
-`;
-
-module.exports.commands = commands;
-module.exports.behaviorDuringEarthquakes = behaviorDuringEarthquakes;
+  • неконтролируемое поведение людей при панике.`,
+} as const;
