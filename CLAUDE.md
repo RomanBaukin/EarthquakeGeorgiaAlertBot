@@ -23,7 +23,7 @@ Telegram-бот оповещений о землетрясениях в Груз
 Слои, от внешнего мира внутрь:
 
 - `src/scraper/` — загрузка страницы (`fetchPage.ts`, нативный fetch с retry) и парсинг таблицы (`parseTable.ts`, cheerio). Не знает про Telegram и БД.
-- `src/domain/` — чистые функции без побочных эффектов: время (`time.ts`), координаты и ссылки на карту (`geo.ts`), фильтр подписки (`filters.ts`), статистика (`stats.ts`). Здесь же лежат все unit-тесты.
+- `src/domain/` — чистые функции без побочных эффектов: время (`time.ts`), координаты и ссылки на карту (`geo.ts`), фильтр подписки (`filters.ts`), статистика (`stats.ts`).
 - `src/db/` — единственное место, работающее с D1: `client.ts` (Kysely + kysely-d1), `schema.ts` (типы таблиц), `repositories/*`.
 - `src/poller/` — оркестрация: `checkForNewEarthquakes.ts` (fetch → parse → insert → рассылка) и `alertDispatcher.ts` (фильтрация подписок и отправка).
 - `src/bot/` — UI: `bot.ts` (команды, middleware регистрации чата), `menus.ts` (@grammyjs/menu).
@@ -31,6 +31,14 @@ Telegram-бот оповещений о землетрясениях в Груз
 - `src/worker.ts` — точка входа Worker'а (`fetch` + `scheduled`).
 
 Слой БД оперирует snake_case (как в таблицах), скрапер — camelCase (`ParsedEarthquake`). Преобразование живёт в репозиториях. Шаблоны сообщений намеренно принимают форму строки БД (`EarthquakeLike` в snake_case), чтобы результат репозитория уходил в рендер без промежуточного маппинга.
+
+## Тесты
+
+Покрыты два слоя. `src/domain/**` и `src/scraper/parseTable.ts` — обычные unit-тесты рядом с кодом. `src/db/repositories/repositories.test.ts` гоняет настоящие репозитории против настоящей SQLite (`node:sqlite`) через шим, повторяющий контракт D1: kysely-d1 дёргает только `prepare(sql).bind(...params).all()`. Полноценный Workers-рантайм для этого не нужен, vitest остаётся в обычном Node.
+
+Схема в шиме поднимается из боевой `migrations/0001_init.sql`, поэтому расхождение миграции с `schema.ts` ловится тестом. Контроль внешних ключей включён (`PRAGMA foreign_keys = ON`), как в D1.
+
+Не покрыты намеренно: `fetchPage.ts` (сетевой ввод-вывод) и `src/bot/**` (UI, проверяется руками в Telegram).
 
 ## Ключевые механизмы
 
