@@ -12,7 +12,23 @@ export default {
       secretToken: env.TELEGRAM_WEBHOOK_SECRET,
     });
 
-    return handleUpdate(request);
+    // Ошибки хендлеров ловятся здесь, а не через `bot.catch`: `webhookCallback`
+    // дёргает `bot.handleUpdate` напрямую, а тот всегда перебрасывает ошибку наружу —
+    // `errorHandler` из `bot.catch` работает только при long polling, которого здесь нет.
+    //
+    // Отвечаем 200, а не 500: на любой другой код Telegram повторит тот же апдейт, а
+    // хендлер к моменту падения уже мог отправить часть сообщений — ретрай продублировал
+    // бы их. Ошибка уходит в логи (включён `[observability]`), апдейт теряется.
+    //
+    // Сюда же попадает падение `bot.init()` при неверном `BOT_TOKEN` — тогда теряется
+    // каждый апдейт, и единственный признак этого будет в логах. Проверку секрета это не
+    // трогает: при несовпадении `webhookCallback` возвращает 401, а не бросает.
+    try {
+      return await handleUpdate(request);
+    } catch (error) {
+      console.error("Ошибка обработки апдейта:", error);
+      return new Response("ok");
+    }
   },
 
   async scheduled(

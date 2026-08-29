@@ -1,4 +1,4 @@
-import { GrammyError, type Bot } from "grammy";
+import { GrammyError, InlineKeyboard, type Bot } from "grammy";
 import type { BotContext } from "../bot/context";
 import type { Db } from "../db/client";
 import type { EarthquakeRow } from "../db/repositories/earthquakeRepository";
@@ -8,6 +8,8 @@ import {
 } from "../db/repositories/subscriptionRepository";
 import { matchesSubscription } from "../domain/filters";
 import { alertMessage } from "../templates/messages";
+
+const alertKeyboard = new InlineKeyboard().text("⬅️ Меню", "open-menu");
 
 export async function dispatchAlerts(
   bot: Bot<BotContext>,
@@ -29,6 +31,7 @@ export async function dispatchAlerts(
       await bot.api.sendMessage(subscription.chat_id, text, {
         parse_mode: "HTML",
         link_preview_options: { is_disabled: true },
+        reply_markup: alertKeyboard,
       });
       delivered += 1;
     } catch (error) {
