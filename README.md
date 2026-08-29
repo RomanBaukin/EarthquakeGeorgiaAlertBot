@@ -12,7 +12,7 @@ Telegram-бот, который следит за землетрясениями
 
 ## Стек
 
-TypeScript, grammY, Cloudflare Workers (Cron Triggers + webhook), D1, Kysely, cheerio.
+TypeScript, grammY, Cloudflare Workers (Cron Triggers + webhook), D1, Kysely.
 
 ## Локальная разработка
 
