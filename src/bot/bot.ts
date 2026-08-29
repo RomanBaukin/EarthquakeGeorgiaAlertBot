@@ -39,7 +39,7 @@ export function createBot(env: Env): Bot<BotContext> {
   });
 
   bot.command("menu", async (ctx) => {
-    await ctx.reply("Главное меню:", { reply_markup: mainMenu });
+    await ctx.reply(texts.menuPrompt, { reply_markup: mainMenu });
   });
 
   bot.command("help", async (ctx) => {
