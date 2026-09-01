@@ -8,7 +8,7 @@ import { getOrCreateSubscription } from "../db/repositories/subscriptionReposito
 import { recentListMessage, settingsMessage, statsMessage } from "../templates/messages";
 import { texts } from "../templates/texts";
 import type { BotContext } from "./context";
-import { MENU_BUTTON_LABEL, mainReplyKeyboard } from "./keyboard";
+import { MENU_BUTTON_LABEL, removeReplyKeyboard } from "./keyboard";
 import { mainMenu, openMainMenu } from "./menus";
 
 function daysAgoIso(days: number): string {
@@ -36,7 +36,7 @@ export function createBot(env: Env): Bot<BotContext> {
 
   bot.command("start", async (ctx) => {
     const name = ctx.from?.first_name ?? "незнакомец";
-    await ctx.reply(texts.greeting(name), { reply_markup: mainReplyKeyboard });
+    await ctx.reply(texts.greeting(name), { reply_markup: removeReplyKeyboard });
     await openMainMenu(ctx);
   });
 
@@ -44,23 +44,23 @@ export function createBot(env: Env): Bot<BotContext> {
     await openMainMenu(ctx);
   });
 
+  // У кого клавиатура ещё висит — по нажатию открываем меню и заодно снимаем её.
   bot.hears(MENU_BUTTON_LABEL, async (ctx) => {
+    await ctx.reply(texts.menuRemoved, { reply_markup: removeReplyKeyboard });
     await openMainMenu(ctx);
   });
 
-  // Новые алерты уходят без инлайн-кнопки, но в истории чатов она осталась:
-  // без этого хендлера нажатие на старую кнопку висело бы часами.
   bot.callbackQuery("open-menu", async (ctx) => {
     await ctx.answerCallbackQuery();
     await openMainMenu(ctx);
   });
 
   bot.command("help", async (ctx) => {
-    await ctx.reply(texts.commands, { reply_markup: mainReplyKeyboard });
+    await ctx.reply(texts.commands, { reply_markup: removeReplyKeyboard });
   });
 
   bot.command("behavior", async (ctx) => {
-    await ctx.reply(texts.behaviorDuringEarthquakes, { reply_markup: mainReplyKeyboard });
+    await ctx.reply(texts.behaviorDuringEarthquakes, { reply_markup: removeReplyKeyboard });
   });
 
   bot.command("recent", async (ctx) => {
@@ -68,7 +68,7 @@ export function createBot(env: Env): Bot<BotContext> {
     await ctx.reply(recentListMessage(events, 10), {
       parse_mode: "HTML",
       link_preview_options: { is_disabled: true },
-      reply_markup: mainReplyKeyboard,
+      reply_markup: removeReplyKeyboard,
     });
   });
 
@@ -79,7 +79,7 @@ export function createBot(env: Env): Bot<BotContext> {
     ]);
     await ctx.reply(statsMessage(computeStats(weekly), computeStats(monthly)), {
       parse_mode: "HTML",
-      reply_markup: mainReplyKeyboard,
+      reply_markup: removeReplyKeyboard,
     });
   });
 

@@ -170,40 +170,44 @@ async function openMenuAndGetKeyboard() {
   };
 }
 
-describe("постоянная клавиатура и меню", () => {
-  it("/start закрепляет reply-клавиатуру и сразу показывает меню", async () => {
+// Клавиатура закреплена на стороне Telegram: перестать её слать недостаточно,
+// нужен явный remove_keyboard, иначе она висит у старых чатов навсегда.
+describe("снятие reply-клавиатуры", () => {
+  it("/start снимает клавиатуру и сразу показывает меню", async () => {
     await bot.handleUpdate(messageUpdate("/start", true) as never);
 
     const sends = calls.filter((c) => c.method === "sendMessage");
     expect(sends).toHaveLength(2);
-
-    const keyboard = sends[0]!.payload.reply_markup as {
-      keyboard: { text: string }[][];
-      is_persistent?: boolean;
-      resize_keyboard?: boolean;
-    };
-    expect(keyboard.keyboard[0]![0]!.text).toBe("☰ Меню");
-    expect(keyboard.is_persistent).toBe(true);
-    expect(keyboard.resize_keyboard).toBe(true);
-
+    expect(sends[0]!.payload.reply_markup).toEqual({ remove_keyboard: true });
     expect(sends[1]!.payload.reply_markup).toHaveProperty("inline_keyboard");
   });
 
-  it("нажатие reply-кнопки «☰ Меню» открывает меню", async () => {
+  it("нажатие старой кнопки «☰ Меню» снимает её и открывает меню", async () => {
     await bot.handleUpdate(messageUpdate("☰ Меню", false) as never);
 
     const sends = calls.filter((c) => c.method === "sendMessage");
-    expect(sends).toHaveLength(1);
-    expect(sends[0]!.payload.text).toBe("Главное меню:");
-    expect(sends[0]!.payload.reply_markup).toHaveProperty("inline_keyboard");
+    expect(sends).toHaveLength(2);
+    expect(sends[0]!.payload.reply_markup).toEqual({ remove_keyboard: true });
+    expect(sends[1]!.payload.text).toBe("Главное меню:");
+    expect(sends[1]!.payload.reply_markup).toHaveProperty("inline_keyboard");
   });
 
-  it("команды без меню тоже досевают reply-клавиатуру", async () => {
+  it("команды без своей разметки тоже досевают снятие", async () => {
     for (const command of ["/help", "/behavior", "/recent", "/stats"]) {
       calls = [];
       await bot.handleUpdate(messageUpdate(command, true) as never);
       const send = calls.find((c) => c.method === "sendMessage")!;
-      expect(send.payload.reply_markup, command).toHaveProperty("keyboard");
+      expect(send.payload.reply_markup, command).toEqual({ remove_keyboard: true });
+    }
+  });
+
+  it("ни одно сообщение не шлёт reply-клавиатуру обратно", async () => {
+    for (const command of ["/start", "/menu", "/help", "/behavior", "/recent", "/stats"]) {
+      calls = [];
+      await bot.handleUpdate(messageUpdate(command, true) as never);
+      for (const call of calls.filter((c) => c.method === "sendMessage")) {
+        expect(call.payload.reply_markup, command).not.toHaveProperty("keyboard");
+      }
     }
   });
 });
@@ -252,8 +256,10 @@ describe("кнопки меню правят сообщение на месте"
   });
 });
 
-describe("алерты", () => {
-  it("уходят без инлайн-разметки, а старая кнопка «⬅️ Меню» всё ещё работает", async () => {
+// Reply-клавиатуры у бота нет, так что эта кнопка — единственный постоянный
+// вход в меню помимо команды. Потерять её значит спрятать меню совсем.
+describe("кнопка «⬅️ Меню» в алертах", () => {
+  it("алерт уходит с инлайн-кнопкой, и она открывает меню", async () => {
     const db = createDb(shim);
     await bot.handleUpdate(messageUpdate("/start", true) as never); // регистрируем чат и подписку
     await insertIfNew(db, {
@@ -274,16 +280,16 @@ describe("алерты", () => {
     expect(delivered).toBe(1);
 
     const alert = calls.find((c) => c.method === "sendMessage")!;
-    expect(alert.payload.reply_markup).toBeUndefined();
+    const markup = alert.payload.reply_markup as {
+      inline_keyboard: { text: string; callback_data: string }[][];
+    };
+    expect(markup.inline_keyboard[0]![0]).toEqual({
+      text: "⬅️ Меню",
+      callback_data: "open-menu",
+    });
 
-    // Кнопка убрана из новых алертов, но в истории чатов она осталась —
-    // хендлер обязан её пережить.
     calls = [];
-    await bot.handleUpdate(
-      callbackUpdate("open-menu", {
-        inline_keyboard: [[{ text: "⬅️ Меню", callback_data: "open-menu" }]],
-      }) as never,
-    );
+    await bot.handleUpdate(callbackUpdate("open-menu", markup) as never);
     const methods = calls.map((c) => c.method);
     expect(methods).toContain("answerCallbackQuery");
     const send = calls.find((c) => c.method === "sendMessage")!;
