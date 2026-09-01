@@ -48,6 +48,8 @@ export function createBot(env: Env): Bot<BotContext> {
     await openMainMenu(ctx);
   });
 
+  // Новые алерты уходят без инлайн-кнопки, но в истории чатов она осталась:
+  // без этого хендлера нажатие на старую кнопку висело бы часами.
   bot.callbackQuery("open-menu", async (ctx) => {
     await ctx.answerCallbackQuery();
     await openMainMenu(ctx);

@@ -252,8 +252,8 @@ describe("кнопки меню правят сообщение на месте"
   });
 });
 
-describe("кнопка «⬅️ Меню» в алертах", () => {
-  it("алерт уходит с инлайн-кнопкой, и она открывает меню", async () => {
+describe("алерты", () => {
+  it("уходят без инлайн-разметки, а старая кнопка «⬅️ Меню» всё ещё работает", async () => {
     const db = createDb(shim);
     await bot.handleUpdate(messageUpdate("/start", true) as never); // регистрируем чат и подписку
     await insertIfNew(db, {
@@ -274,16 +274,16 @@ describe("кнопка «⬅️ Меню» в алертах", () => {
     expect(delivered).toBe(1);
 
     const alert = calls.find((c) => c.method === "sendMessage")!;
-    const markup = alert.payload.reply_markup as {
-      inline_keyboard: { text: string; callback_data: string }[][];
-    };
-    expect(markup.inline_keyboard[0]![0]).toEqual({
-      text: "⬅️ Меню",
-      callback_data: "open-menu",
-    });
+    expect(alert.payload.reply_markup).toBeUndefined();
 
+    // Кнопка убрана из новых алертов, но в истории чатов она осталась —
+    // хендлер обязан её пережить.
     calls = [];
-    await bot.handleUpdate(callbackUpdate("open-menu", markup) as never);
+    await bot.handleUpdate(
+      callbackUpdate("open-menu", {
+        inline_keyboard: [[{ text: "⬅️ Меню", callback_data: "open-menu" }]],
+      }) as never,
+    );
     const methods = calls.map((c) => c.method);
     expect(methods).toContain("answerCallbackQuery");
     const send = calls.find((c) => c.method === "sendMessage")!;
