@@ -29,6 +29,7 @@ export interface EarthquakeEventTable {
   coordinates_raw: string;
   region: string;
   notified_at: string | null;
+  retracted_at: string | null;
   created_at: Generated<string>;
 }
 
