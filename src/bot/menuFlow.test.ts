@@ -10,15 +10,13 @@
 //
 // Остальной UI (тексты команд, вёрстка сообщений) по-прежнему проверяется руками
 // в Telegram — см. CLAUDE.md.
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Bot } from "grammy";
 import { createBot } from "./bot";
 import type { BotContext } from "./context";
 import { createDb } from "../db/client";
+import { loadMigrations } from "../db/testing/loadMigrations";
 import { insertIfNew, listPendingAlerts } from "../db/repositories/earthquakeRepository";
 import { dispatchAlerts } from "../poller/alertDispatcher";
 
@@ -47,10 +45,7 @@ function createD1Shim(sqlite: DatabaseSync): D1Database {
   } as unknown as D1Database;
 }
 
-const migration = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "..", "..", "migrations", "0001_init.sql"),
-  "utf8",
-);
+const migration = loadMigrations();
 
 const CHAT = { id: 42, type: "private" as const, first_name: "Tester" };
 const FROM = { id: 42, is_bot: false, first_name: "Tester" };

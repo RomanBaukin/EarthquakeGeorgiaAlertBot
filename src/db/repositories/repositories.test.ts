@@ -6,22 +6,23 @@
 // через шим, повторяющий контракт D1: kysely-d1 дёргает только
 // `prepare(sql).bind(...params).all()` и читает `results` и `meta`. Полноценный
 // Workers-рантайм ради этого не нужен, а vitest остаётся в обычном Node.
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ParsedEarthquake } from "../../scraper/types";
 import { createDb, type Db } from "../client";
+import { loadMigrations } from "../testing/loadMigrations";
 import { upsertChat } from "./chatRepository";
 import {
+  applyEventUpdate,
   countEvents,
   insertIfNew,
   listPendingAlerts,
   listRecent,
   listSince,
+  listWindow,
   markAllPendingNotified,
   markNotified,
+  markRetracted,
 } from "./earthquakeRepository";
 import {
   getOrCreateSubscription,
@@ -58,10 +59,7 @@ function createD1Shim(sqlite: DatabaseSync): D1Database {
   } as unknown as D1Database;
 }
 
-const migration = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "migrations", "0001_init.sql"),
-  "utf8",
-);
+const migration = loadMigrations();
 
 let sqlite: DatabaseSync;
 let db: Db;
@@ -196,6 +194,58 @@ describe("earthquakeRepository", () => {
 
   it("считает события на пустой базе как ноль", async () => {
     expect(await countEvents(db)).toBe(0);
+  });
+
+  // Переиздание события источником: строка обязана сменить ключ на месте, а не
+  // завестись второй, и сохранить отметку о рассылке — иначе алерт уйдёт повторно.
+  it("переносит строку на новый ключ источника, не трогая отметку о рассылке", async () => {
+    await insertIfNew(db, earthquake({ dedupeKey: "id:588681", magnitude: 4.1 }));
+    const [saved] = await listRecent(db, 1);
+    await markNotified(db, saved!.id);
+
+    await applyEventUpdate(
+      db,
+      saved!.id,
+      earthquake({ dedupeKey: "id:588683", magnitude: 4.2, region: "Уточнённый регион" }),
+    );
+
+    expect(await countEvents(db)).toBe(1);
+    const [updated] = await listRecent(db, 1);
+    expect(updated).toMatchObject({
+      id: saved!.id,
+      dedupe_key: "id:588683",
+      magnitude: 4.2,
+      region: "Уточнённый регион",
+    });
+    expect(updated!.notified_at).not.toBeNull();
+    expect(await listPendingAlerts(db, 10)).toHaveLength(0);
+  });
+
+  it("убирает отозванное событие из списков, статистики и очереди рассылки", async () => {
+    await insertIfNew(db, earthquake({ dedupeKey: "id:gone" }));
+    await insertIfNew(db, earthquake({ dedupeKey: "id:alive", sourceTime: "2026-08-29T00:00:00.000Z" }));
+    const [, retracted] = await listRecent(db, 10);
+
+    await markRetracted(db, retracted!.id);
+
+    expect((await listRecent(db, 10)).map((row) => row.dedupe_key)).toEqual(["id:alive"]);
+    expect((await listSince(db, "2026-01-01T00:00:00.000Z")).map((row) => row.dedupe_key)).toEqual([
+      "id:alive",
+    ]);
+    expect((await listPendingAlerts(db, 10)).map((row) => row.dedupe_key)).toEqual(["id:alive"]);
+  });
+
+  // Окно сверки не должно захватывать архив: всё, что старше самого старого события
+  // страницы, источник просто перестал показывать.
+  it("отдаёт для сверки только неотозванные события начиная с границы окна", async () => {
+    await insertIfNew(db, earthquake({ dedupeKey: "id:old", sourceTime: "2026-08-01T00:00:00.000Z" }));
+    await insertIfNew(db, earthquake({ dedupeKey: "id:edge", sourceTime: "2026-08-20T00:00:00.000Z" }));
+    await insertIfNew(db, earthquake({ dedupeKey: "id:gone", sourceTime: "2026-08-25T00:00:00.000Z" }));
+    const [gone] = await listRecent(db, 1);
+    await markRetracted(db, gone!.id);
+
+    const window = await listWindow(db, "2026-08-20T00:00:00.000Z");
+    expect(window.map((row) => row.dedupe_key)).toEqual(["id:edge"]);
   });
 });
 

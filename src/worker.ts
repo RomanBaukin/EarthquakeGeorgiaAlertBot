@@ -39,8 +39,11 @@ export default {
     const env = parseEnv(rawEnv);
     ctx.waitUntil(
       checkForNewEarthquakes(env)
-        .then(({ inserted, alerted }) =>
-          console.log(`Проверка завершена: новых ${inserted}, разослано ${alerted}`),
+        .then(({ inserted, updated, revised, retracted, alerted }) =>
+          console.log(
+            `Проверка завершена: новых ${inserted}, уточнено ${updated}, ` +
+              `переиздано ${revised}, отозвано ${retracted}, разослано ${alerted}`,
+          ),
         )
         .catch((error) => console.error("Проверка землетрясений упала:", error)),
     );
