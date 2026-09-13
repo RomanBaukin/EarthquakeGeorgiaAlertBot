@@ -15,7 +15,7 @@ import { isEventStale } from "../domain/time";
 import { fetchEarthquakesPage } from "../scraper/fetchPage";
 import { parseEarthquakesTable } from "../scraper/parseTable";
 import { dispatchAlerts } from "./alertDispatcher";
-import { reconcile } from "./reconcile";
+import { reconcile, reconcileWindowStart } from "./reconcile";
 
 const MAX_ALERTS_PER_RUN = 5;
 // Второй рубеж обороны после проверки countEvents === 0: если часть back-catalog
@@ -61,11 +61,7 @@ export async function checkForNewEarthquakes(env: Env): Promise<PollResult> {
   // Сверка считается от текущего состояния страницы, поэтому убитый на середине тик
   // не оставляет полудела: следующий пересчитает план заново и доделает. Транзакций
   // в D1 нет, и опереться здесь больше не на что.
-  const pageOldest = events.reduce(
-    (oldest, event) => (event.sourceTime < oldest ? event.sourceTime : oldest),
-    events[0]!.sourceTime,
-  );
-  const plan = reconcile(events, await listWindow(db, pageOldest));
+  const plan = reconcile(events, await listWindow(db, reconcileWindowStart(events)));
 
   for (const update of [...plan.refreshes, ...plan.revisions]) {
     await applyEventUpdate(db, update.id, update.event);

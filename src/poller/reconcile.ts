@@ -6,6 +6,11 @@ import type { ParsedEarthquake } from "../scraper/types";
 // список бота расходится с сайтом. Поэтому страница трактуется не как поток новых
 // строк, а как авторитетное состояние окна: что в нём разошлось — приводится к нему.
 //
+// Замена не обязана уложиться в один тик: между исчезновением прежней строки и
+// появлением переизданной проходит и три минуты (12.09.2026, id:588971 → id:588972).
+// Всё это время прежняя строка лежит отозванной — и обязана оставаться кандидатом на
+// ревизию, иначе переиздание снова выглядит новым событием и алерт уходит второй раз.
+//
 // Функция чистая: никакой базы и Telegram, только решение. Матчинг ревизий — то
 // единственное место, где ошибка тихо съедает настоящий алерт, и его надо держать
 // под обычным unit-тестом.
@@ -21,6 +26,7 @@ export interface StoredEvent {
   longitude: number | null;
   coordinates_raw: string;
   region: string;
+  retracted_at: string | null;
 }
 
 export interface EventUpdate {
@@ -34,7 +40,7 @@ export interface ReconcilePlan {
   /** Событие переиздано под новым id: строка обновляется вместе с ключом. */
   revisions: EventUpdate[];
   inserts: ParsedEarthquake[];
-  /** id строк, исчезнувших со страницы без замены. */
+  /** id строк, исчезнувших со страницы без замены; уже отозванные сюда не попадают. */
   retractions: number[];
 }
 
@@ -44,8 +50,11 @@ export interface ReconcilePlan {
 const REVISION_TIME_WINDOW_MS = 120_000;
 const REVISION_COORD_WINDOW_DEG = 0.5;
 
+// Расхождением считается и отзыв: если строка помечена отозванной, а источник её
+// показывает, её надо вернуть в списки — даже когда прочие поля совпали до буквы.
 function hasChanged(row: StoredEvent, event: ParsedEarthquake): boolean {
   return (
+    row.retracted_at !== null ||
     row.source_time !== event.sourceTime ||
     row.source_time_raw !== event.sourceTimeRaw ||
     row.magnitude !== event.magnitude ||
@@ -75,18 +84,31 @@ function revisionScore(row: StoredEvent, event: ParsedEarthquake): number | null
   return timeGapMs / REVISION_TIME_WINDOW_MS + coordGapDeg / REVISION_COORD_WINDOW_DEG;
 }
 
+function pageOldestTime(pageEvents: ParsedEarthquake[]): string {
+  return pageEvents.reduce(
+    (oldest, event) => (event.sourceTime < oldest ? event.sourceTime : oldest),
+    pageEvents[0]!.sourceTime,
+  );
+}
+
+// Нижняя граница выборки из базы. Ниже самого старого события страницы у источника
+// данных просто нет: там лежит архив, вытесненный из выдачи. Запас в одно окно
+// матчинга берётся исключительно ради ревизий — сдвинув время вперёд, переизданное
+// событие оставляет прежнюю строку под границей страницы, и без запаса та в сверку
+// не попадёт. На отзывы запас не распространяется: см. reconcile.
+export function reconcileWindowStart(pageEvents: ParsedEarthquake[]): string {
+  const oldest = new Date(pageOldestTime(pageEvents)).getTime();
+  return new Date(oldest - REVISION_TIME_WINDOW_MS).toISOString();
+}
+
 export function reconcile(pageEvents: ParsedEarthquake[], stored: StoredEvent[]): ReconcilePlan {
   const plan: ReconcilePlan = { refreshes: [], revisions: [], inserts: [], retractions: [] };
   // Пустая выдача — это сломанный источник, а не отзыв всех событий разом.
   if (pageEvents.length === 0) return plan;
 
-  // Ниже самого старого события страницы данных у источника просто нет: там лежит
-  // архив, вытесненный из выдачи. Его нельзя ни считать отозванным, ни сверять.
-  const pageOldest = pageEvents.reduce(
-    (oldest, event) => (event.sourceTime < oldest ? event.sourceTime : oldest),
-    pageEvents[0]!.sourceTime,
-  );
-  const window = stored.filter((row) => row.source_time >= pageOldest);
+  const pageOldest = pageOldestTime(pageEvents);
+  const matchStart = reconcileWindowStart(pageEvents);
+  const window = stored.filter((row) => row.source_time >= matchStart);
 
   const byKey = new Map(window.map((row) => [row.dedupe_key, row]));
   const fresh: ParsedEarthquake[] = [];
@@ -105,9 +127,10 @@ export function reconcile(pageEvents: ParsedEarthquake[], stored: StoredEvent[])
 
   const missing = window.filter((row) => !matchedKeys.has(row.dedupe_key));
 
-  // Кандидатами служат только строки, исчезнувшие со страницы: настоящий афтершок
-  // из выдачи не пропадает, поэтому подменить им ревизию нельзя. Пары разбираются
-  // от самой близкой, каждая строка участвует один раз.
+  // Кандидатами служат только строки, которых на странице нет, — исчезнувшие сейчас
+  // и отозванные на прошлых тиках: настоящий афтершок из выдачи не пропадает, поэтому
+  // подменить им ревизию нельзя. Пары разбираются от самой близкой, каждая строка
+  // участвует один раз.
   const pairs: { event: ParsedEarthquake; row: StoredEvent; score: number }[] = [];
   for (const event of fresh) {
     for (const row of missing) {
@@ -131,8 +154,16 @@ export function reconcile(pageEvents: ParsedEarthquake[], stored: StoredEvent[])
     else plan.revisions.push({ id: row.id, event });
   }
 
+  // Отзыв идёт строго по границе страницы: ниже неё лежит архив, вытесненный из
+  // выдачи, и первый же тик отправил бы его целиком в отозванные. Запас под границей
+  // существует только ради матчинга ревизий.
+  //
+  // Отозванная строка остаётся в выборке и после отзыва — как кандидат на ревизию.
+  // Отзывать её повторно нечего: это лишняя запись в D1 каждую минуту.
   for (const row of missing) {
-    if (!takenRows.has(row.id)) plan.retractions.push(row.id);
+    if (takenRows.has(row.id)) continue;
+    if (row.retracted_at !== null || row.source_time < pageOldest) continue;
+    plan.retractions.push(row.id);
   }
 
   return plan;

@@ -236,8 +236,10 @@ describe("earthquakeRepository", () => {
   });
 
   // Окно сверки не должно захватывать архив: всё, что старше самого старого события
-  // страницы, источник просто перестал показывать.
-  it("отдаёт для сверки только неотозванные события начиная с границы окна", async () => {
+  // страницы, источник просто перестал показывать. А вот отозванные строки в окне
+  // нужны: источник переиздаёт событие и через несколько минут после того, как убрал
+  // его со страницы, и лечь такая ревизия обязана на прежнюю строку.
+  it("отдаёт для сверки события начиная с границы окна, включая отозванные", async () => {
     await insertIfNew(db, earthquake({ dedupeKey: "id:old", sourceTime: "2026-08-01T00:00:00.000Z" }));
     await insertIfNew(db, earthquake({ dedupeKey: "id:edge", sourceTime: "2026-08-20T00:00:00.000Z" }));
     await insertIfNew(db, earthquake({ dedupeKey: "id:gone", sourceTime: "2026-08-25T00:00:00.000Z" }));
@@ -245,7 +247,29 @@ describe("earthquakeRepository", () => {
     await markRetracted(db, gone!.id);
 
     const window = await listWindow(db, "2026-08-20T00:00:00.000Z");
-    expect(window.map((row) => row.dedupe_key)).toEqual(["id:edge"]);
+    expect(window.map((row) => row.dedupe_key)).toEqual(["id:gone", "id:edge"]);
+  });
+
+  // Переиздание, пришедшее после отзыва: строка обязана вернуться в списки — и без
+  // повторного алерта, потому что о самом толчке уже сообщили.
+  it("возвращает отозванную строку в списки, не трогая отметку о рассылке", async () => {
+    await insertIfNew(db, earthquake({ dedupeKey: "id:588971", depthKm: 5 }));
+    const [saved] = await listRecent(db, 1);
+    await markNotified(db, saved!.id);
+    await markRetracted(db, saved!.id);
+
+    await applyEventUpdate(db, saved!.id, earthquake({ dedupeKey: "id:588972", depthKm: 9 }));
+
+    const [restored] = await listRecent(db, 10);
+    expect(restored).toMatchObject({
+      id: saved!.id,
+      dedupe_key: "id:588972",
+      depth_km: 9,
+      retracted_at: null,
+    });
+    expect(restored!.notified_at).not.toBeNull();
+    expect(await listPendingAlerts(db, 10)).toHaveLength(0);
+    expect(await countEvents(db)).toBe(1);
   });
 });
 
