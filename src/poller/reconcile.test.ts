@@ -308,4 +308,42 @@ describe("reconcile", () => {
     expect(plan.revisions).toEqual([]);
     expect(plan.inserts).toEqual([aftershock]);
   });
+
+  // Ревизия сдвигает время на секунду в любую сторону. 08.09 и 12.09 сдвиг был
+  // назад, и прежняя строка оставалась внутри окна; при сдвиге вперёд она
+  // проваливается ровно под его нижнюю границу — если переизданное событие
+  // оказалось самым старым на странице. Разница с разобранными случаями только в
+  // знаке секунды, а итог тот же: второй алерт о том же толчке.
+  it("узнаёт ревизию, сдвинувшую время вперёд с самого низа страницы", () => {
+    const republished = page({
+      sourceTimeRaw: "2026-09-08 04:52:17",
+      sourceTime: "2026-09-08T04:52:17.000Z",
+    });
+
+    const plan = reconcile([republished], [stored()]);
+
+    expect(plan.revisions).toEqual([{ id: 1, event: republished }]);
+    expect(plan.inserts).toEqual([]);
+    expect(plan.retractions).toEqual([]);
+  });
+
+  // Запас под границей страницы нужен только для матчинга ревизий. Отзывы идут
+  // строго по границе: ниже неё лежит архив, вытесненный из выдачи, и первый же
+  // тик отправил бы его целиком в отозванные.
+  it("не отзывает строку, попавшую в выборку только ради матчинга ревизий", () => {
+    const belowWindow = stored({
+      id: 9,
+      dedupe_key: "id:588679",
+      source_time: "2026-09-08T04:51:30.000Z",
+      source_time_raw: "2026-09-08 04:51:30",
+      latitude: 43.6,
+      longitude: 45.7,
+      coordinates_raw: "43.638/45.6976",
+    });
+
+    const plan = reconcile([page()], [belowWindow]);
+
+    expect(plan.retractions).toEqual([]);
+    expect(plan.inserts).toEqual([page()]);
+  });
 });

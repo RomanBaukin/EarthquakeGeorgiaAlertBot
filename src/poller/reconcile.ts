@@ -84,18 +84,31 @@ function revisionScore(row: StoredEvent, event: ParsedEarthquake): number | null
   return timeGapMs / REVISION_TIME_WINDOW_MS + coordGapDeg / REVISION_COORD_WINDOW_DEG;
 }
 
+function pageOldestTime(pageEvents: ParsedEarthquake[]): string {
+  return pageEvents.reduce(
+    (oldest, event) => (event.sourceTime < oldest ? event.sourceTime : oldest),
+    pageEvents[0]!.sourceTime,
+  );
+}
+
+// Нижняя граница выборки из базы. Ниже самого старого события страницы у источника
+// данных просто нет: там лежит архив, вытесненный из выдачи. Запас в одно окно
+// матчинга берётся исключительно ради ревизий — сдвинув время вперёд, переизданное
+// событие оставляет прежнюю строку под границей страницы, и без запаса та в сверку
+// не попадёт. На отзывы запас не распространяется: см. reconcile.
+export function reconcileWindowStart(pageEvents: ParsedEarthquake[]): string {
+  const oldest = new Date(pageOldestTime(pageEvents)).getTime();
+  return new Date(oldest - REVISION_TIME_WINDOW_MS).toISOString();
+}
+
 export function reconcile(pageEvents: ParsedEarthquake[], stored: StoredEvent[]): ReconcilePlan {
   const plan: ReconcilePlan = { refreshes: [], revisions: [], inserts: [], retractions: [] };
   // Пустая выдача — это сломанный источник, а не отзыв всех событий разом.
   if (pageEvents.length === 0) return plan;
 
-  // Ниже самого старого события страницы данных у источника просто нет: там лежит
-  // архив, вытесненный из выдачи. Его нельзя ни считать отозванным, ни сверять.
-  const pageOldest = pageEvents.reduce(
-    (oldest, event) => (event.sourceTime < oldest ? event.sourceTime : oldest),
-    pageEvents[0]!.sourceTime,
-  );
-  const window = stored.filter((row) => row.source_time >= pageOldest);
+  const pageOldest = pageOldestTime(pageEvents);
+  const matchStart = reconcileWindowStart(pageEvents);
+  const window = stored.filter((row) => row.source_time >= matchStart);
 
   const byKey = new Map(window.map((row) => [row.dedupe_key, row]));
   const fresh: ParsedEarthquake[] = [];
@@ -141,10 +154,16 @@ export function reconcile(pageEvents: ParsedEarthquake[], stored: StoredEvent[])
     else plan.revisions.push({ id: row.id, event });
   }
 
-  // Отозванная строка остаётся в окне и после отзыва — как кандидат на ревизию.
+  // Отзыв идёт строго по границе страницы: ниже неё лежит архив, вытесненный из
+  // выдачи, и первый же тик отправил бы его целиком в отозванные. Запас под границей
+  // существует только ради матчинга ревизий.
+  //
+  // Отозванная строка остаётся в выборке и после отзыва — как кандидат на ревизию.
   // Отзывать её повторно нечего: это лишняя запись в D1 каждую минуту.
   for (const row of missing) {
-    if (!takenRows.has(row.id) && row.retracted_at === null) plan.retractions.push(row.id);
+    if (takenRows.has(row.id)) continue;
+    if (row.retracted_at !== null || row.source_time < pageOldest) continue;
+    plan.retractions.push(row.id);
   }
 
   return plan;
