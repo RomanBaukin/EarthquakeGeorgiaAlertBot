@@ -1,5 +1,6 @@
 import { Menu } from "@grammyjs/menu";
 import { GrammyError } from "grammy";
+import { getAdminStats } from "../db/repositories/adminRepository";
 import { computeStats } from "../domain/stats";
 import { listRecent, listSince } from "../db/repositories/earthquakeRepository";
 import {
@@ -7,7 +8,12 @@ import {
   setMinMagnitude,
   setSubscriptionActive,
 } from "../db/repositories/subscriptionRepository";
-import { recentListMessage, settingsMessage, statsMessage } from "../templates/messages";
+import {
+  adminPanelMessage,
+  recentListMessage,
+  settingsMessage,
+  statsMessage,
+} from "../templates/messages";
 import { texts } from "../templates/texts";
 import type { BotContext } from "./context";
 
@@ -73,6 +79,22 @@ for (const preset of MAGNITUDE_PRESETS) {
 
 settingsMenu.row().back("⬅️ Назад");
 
+export async function adminPanelText(ctx: BotContext): Promise<string> {
+  const now = new Date();
+  return adminPanelMessage(await getAdminStats(ctx.db, now), now);
+}
+
+// Подменю статичное, и @grammyjs/menu пропустит его колбэк от кого угодно: кнопку
+// не-админ не увидит, но прислать её данные может сам. Поэтому проверка повторяется
+// здесь, а не только при отрисовке кнопки входа.
+export const adminMenu = new Menu<BotContext>("admin")
+  .text("🔄 Обновить", async (ctx) => {
+    if (!ctx.isAdmin) return;
+    await editIgnoringNoChange(ctx, await adminPanelText(ctx), { parse_mode: "HTML" });
+  })
+  .row()
+  .back("⬅️ Назад");
+
 export const mainMenu = new Menu<BotContext>("main");
 
 for (const count of RECENT_COUNTS) {
@@ -105,4 +127,15 @@ mainMenu
     await editIgnoringNoChange(ctx, settingsMessage(subscription), { parse_mode: "HTML" });
   });
 
+// Кнопка рисуется заново при каждой отрисовке меню и только для админа в личке
+// (см. BotContext.isAdmin), поэтому остальные её не видят.
+mainMenu.dynamic((ctx, range) => {
+  if (!ctx.isAdmin) return;
+  range.row().submenu("🛠 Админка", "admin", async (ctx) => {
+    if (!ctx.isAdmin) return;
+    await editIgnoringNoChange(ctx, await adminPanelText(ctx), { parse_mode: "HTML" });
+  });
+});
+
 mainMenu.register(settingsMenu);
+mainMenu.register(adminMenu);

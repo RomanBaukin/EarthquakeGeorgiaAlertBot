@@ -72,10 +72,16 @@ beforeEach(async () => {
   editFailsAsNotModified = false;
   editFailsAsOtherError = false;
 
-  bot = createBot({
+  bot = await makeBot([]);
+});
+
+/** Бот поверх общей SQLite; все его вызовы Telegram API пишутся в общий `calls`. */
+async function makeBot(adminIds: number[]): Promise<Bot<BotContext>> {
+  const bot = createBot({
     BOT_TOKEN: "123:fake",
     TELEGRAM_WEBHOOK_SECRET: "secret",
     SOURCE_URL: "https://example.com",
+    ADMIN_IDS: adminIds,
     DB: shim,
   });
 
@@ -119,15 +125,16 @@ beforeEach(async () => {
   });
 
   await bot.init();
-});
+  return bot;
+}
 
-function messageUpdate(text: string, isCommand: boolean) {
+function messageUpdate(text: string, isCommand: boolean, chat: object = CHAT) {
   return {
     update_id: calls.length + 1,
     message: {
       message_id: 1,
       date: 0,
-      chat: CHAT,
+      chat,
       from: FROM,
       text,
       ...(isCommand
@@ -157,8 +164,8 @@ function callbackUpdate(data: string, replyMarkup: unknown) {
 }
 
 /** Открывает меню и возвращает callback_data кнопок, как их сгенерировал сам бот. */
-async function openMenuAndGetKeyboard() {
-  await bot.handleUpdate(messageUpdate("/menu", true) as never);
+async function openMenuAndGetKeyboard(target = bot, chat: object = CHAT) {
+  await target.handleUpdate(messageUpdate("/menu", true, chat) as never);
   const menuCall = calls.filter((c) => c.method === "sendMessage").at(-1)!;
   return menuCall.payload.reply_markup as {
     inline_keyboard: { text: string; callback_data?: string }[][];
@@ -289,5 +296,88 @@ describe("кнопка «⬅️ Меню» в алертах", () => {
     expect(methods).toContain("answerCallbackQuery");
     const send = calls.find((c) => c.method === "sendMessage")!;
     expect(send.payload.text).toBe("Главное меню:");
+  });
+});
+
+// Админка видна ровно одному человеку. Сломать это молча проще всего: кнопка,
+// которая вдруг показалась всем, ни на типах, ни на диффе не видна, а цена —
+// сводка по пользователям у каждого подписчика.
+describe("админка", () => {
+  const GROUP = { id: -100, type: "group" as const, title: "Группа" };
+
+  type Keyboard = { inline_keyboard: { text: string; callback_data?: string }[][] };
+
+  const labels = (keyboard: Keyboard) => keyboard.inline_keyboard.flat().map((b) => b.text);
+  const button = (keyboard: Keyboard, label: string) =>
+    keyboard.inline_keyboard.flat().find((b) => b.text === label)!;
+
+  it("у админа в личке в главном меню есть кнопка «🛠 Админка»", async () => {
+    const admin = await makeBot([42]);
+    expect(labels(await openMenuAndGetKeyboard(admin))).toContain("🛠 Админка");
+  });
+
+  it("у обычного пользователя кнопки нет, а /admin молчит", async () => {
+    expect(labels(await openMenuAndGetKeyboard())).not.toContain("🛠 Админка");
+
+    calls = [];
+    await bot.handleUpdate(messageUpdate("/admin", true) as never);
+    expect(calls.filter((c) => c.method === "sendMessage")).toHaveLength(0);
+  });
+
+  // Меню в группе видят все участники — вместе с кнопкой, если её нарисовать.
+  it("в группе кнопки нет даже у админа, и /admin там молчит", async () => {
+    const admin = await makeBot([42]);
+    expect(labels(await openMenuAndGetKeyboard(admin, GROUP))).not.toContain("🛠 Админка");
+
+    calls = [];
+    await admin.handleUpdate(messageUpdate("/admin", true, GROUP) as never);
+    expect(calls.filter((c) => c.method === "sendMessage")).toHaveLength(0);
+  });
+
+  it("кнопка «🛠 Админка» и «🔄 Обновить» правят сообщение на месте", async () => {
+    const admin = await makeBot([42]);
+    const menu = await openMenuAndGetKeyboard(admin);
+
+    calls = [];
+    await admin.handleUpdate(callbackUpdate(button(menu, "🛠 Админка").callback_data!, menu) as never);
+    const opened = calls.find((c) => c.method === "editMessageText")!;
+    expect(opened.payload.text).toContain("Пользователей: 1");
+    expect(calls.map((c) => c.method)).not.toContain("sendMessage");
+
+    const panel = opened.payload.reply_markup as Keyboard;
+    expect(labels(panel)).toEqual(["🔄 Обновить", "⬅️ Назад"]);
+
+    calls = [];
+    await admin.handleUpdate(callbackUpdate(button(panel, "🔄 Обновить").callback_data!, panel) as never);
+    const methods = calls.map((c) => c.method);
+    expect(methods).toContain("editMessageText");
+    expect(methods).not.toContain("sendMessage");
+  });
+
+  it("/admin у админа в личке присылает сводку с кнопкой «🔄 Обновить»", async () => {
+    const admin = await makeBot([42]);
+
+    calls = [];
+    await admin.handleUpdate(messageUpdate("/admin", true) as never);
+    const sends = calls.filter((c) => c.method === "sendMessage");
+    expect(sends).toHaveLength(1);
+    expect(sends[0]!.payload.text).toContain("Пользователей:");
+    expect(labels(sends[0]!.payload.reply_markup as Keyboard)).toContain("🔄 Обновить");
+  });
+
+  // Кнопка «Обновить» лежит в статичном подменю, и меню пропустит её колбэк от
+  // кого угодно. Не-админ его не увидит, но может прислать сам — поэтому проверка
+  // повторяется в хендлере.
+  it("колбэк «Обновить» от обычного пользователя сводку не показывает", async () => {
+    const admin = await makeBot([42]);
+    await admin.handleUpdate(messageUpdate("/admin", true) as never);
+    const panel = calls.filter((c) => c.method === "sendMessage").at(-1)!.payload
+      .reply_markup as Keyboard;
+
+    calls = [];
+    await bot.handleUpdate(callbackUpdate(button(panel, "🔄 Обновить").callback_data!, panel) as never);
+    for (const call of calls.filter((c) => c.method === "editMessageText")) {
+      expect(call.payload.text ?? "").not.toContain("Пользователей:");
+    }
   });
 });
