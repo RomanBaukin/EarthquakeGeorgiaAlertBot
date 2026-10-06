@@ -1,2 +1,4 @@
 BOT_TOKEN=123456:replace-with-your-telegram-bot-token
 TELEGRAM_WEBHOOK_SECRET=replace-with-a-long-random-string
+# Необязательно: Telegram user id админов через запятую
+# ADMIN_IDS=123456789

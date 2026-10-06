@@ -1,3 +1,4 @@
+import type { AdminStats } from "../db/repositories/adminRepository";
 import { buildMapLinks } from "../domain/geo";
 import type { EarthquakeStats } from "../domain/stats";
 import { formatTbilisi } from "../domain/time";
@@ -88,5 +89,49 @@ export function settingsMessage(subscription: {
     `Порог магнитуды: <b>${threshold}</b>`,
     "",
     "Меняй настройки кнопками ниже.",
+  ].join("\n");
+}
+
+function formatAge(isoUtc: string, now: Date): string {
+  const minutes = Math.max(0, Math.floor((now.getTime() - new Date(isoUtc).getTime()) / 60_000));
+  if (minutes < 60) return `${minutes} мин назад`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours} ч назад`;
+  return `${Math.floor(hours / 24)} дн назад`;
+}
+
+function formatMoment(isoUtc: string | null, now: Date): string {
+  return isoUtc === null ? "—" : `${formatTbilisi(isoUtc)} (${formatAge(isoUtc, now)})`;
+}
+
+export function adminPanelMessage(stats: AdminStats, now: Date): string {
+  const { chats, newChats } = stats;
+  const thresholds =
+    stats.thresholds.length === 0
+      ? ["никто не получает алерты"]
+      : stats.thresholds.map(
+          ({ minMagnitude, chats: count }) =>
+            `${minMagnitude === 0 ? "любая" : `от ${minMagnitude}`} — ${count}`,
+        );
+  const pending =
+    stats.pendingAlerts > 0
+      ? `⚠️ Ждут рассылки: ${stats.pendingAlerts}`
+      : "Ждут рассылки: 0";
+
+  return [
+    "<b>🛠 Админка</b>",
+    "",
+    `<b>👥 Пользователей: ${chats.total}</b>`,
+    `Получают алерты: ${chats.active}, отключены: ${chats.total - chats.active}`,
+    `Лички: ${chats.private}, группы и каналы: ${chats.groups}`,
+    `Новые: за сутки ${newChats.day}, за неделю ${newChats.week}, за месяц ${newChats.month}`,
+    "",
+    "<b>🎚 Пороги магнитуды</b>",
+    ...thresholds,
+    "",
+    "<b>🩺 Поллер</b>",
+    `Последний толчок: ${formatMoment(stats.lastEventTime, now)}`,
+    `Последняя запись в базу: ${formatMoment(stats.lastRecordedAt, now)}`,
+    pending,
   ].join("\n");
 }

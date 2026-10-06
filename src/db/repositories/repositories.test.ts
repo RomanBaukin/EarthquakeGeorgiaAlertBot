@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ParsedEarthquake } from "../../scraper/types";
 import { createDb, type Db } from "../client";
 import { loadMigrations } from "../testing/loadMigrations";
+import { getAdminStats } from "./adminRepository";
 import { upsertChat } from "./chatRepository";
 import {
   applyEventUpdate,
@@ -363,5 +364,87 @@ describe("subscriptionRepository", () => {
 
   it("не создаёт подписку для незарегистрированного чата", async () => {
     await expect(getOrCreateSubscription(db, 999)).rejects.toThrow();
+  });
+});
+
+describe("adminRepository", () => {
+  const now = new Date("2026-10-06T12:00:00.000Z");
+
+  // created_at ставит сама SQLite (datetime('now')), поэтому возраст чата задаём
+  // напрямую — и в её же формате, без «T» и «Z», как он лежит в боевой базе.
+  function setChatCreatedAt(id: number, sqliteTime: string) {
+    sqlite.prepare("UPDATE chat SET created_at = ? WHERE id = ?").run(sqliteTime, id);
+  }
+
+  async function addChat(id: number, type: string, minMagnitude = 0) {
+    await upsertChat(db, { id, type, title: type === "private" ? null : "Чат" });
+    await getOrCreateSubscription(db, id);
+    if (minMagnitude !== 0) await setMinMagnitude(db, id, minMagnitude);
+  }
+
+  it("на пустой базе отдаёт нули и пустые отметки", async () => {
+    expect(await getAdminStats(db, now)).toEqual({
+      chats: { total: 0, active: 0, private: 0, groups: 0 },
+      newChats: { day: 0, week: 0, month: 0 },
+      thresholds: [],
+      lastEventTime: null,
+      lastRecordedAt: null,
+      pendingAlerts: 0,
+    });
+  });
+
+  it("считает чаты: всего, получающие алерты, лички и группы", async () => {
+    await addChat(1, "private");
+    await addChat(2, "private");
+    await addChat(-100, "group");
+    await addChat(-1001858418173, "supergroup");
+    await setSubscriptionActive(db, 2, false);
+
+    const { chats } = await getAdminStats(db, now);
+    expect(chats).toEqual({ total: 4, active: 3, private: 2, groups: 2 });
+  });
+
+  // Граница включительная: чат, пришедший ровно сутки назад, — новый за сутки.
+  it("считает новые чаты за сутки, неделю и месяц", async () => {
+    for (const id of [1, 2, 3, 4]) await addChat(id, "private");
+    setChatCreatedAt(1, "2026-10-06 11:00:00");
+    setChatCreatedAt(2, "2026-10-05 12:00:00");
+    setChatCreatedAt(3, "2026-10-01 12:00:00");
+    setChatCreatedAt(4, "2026-08-01 12:00:00");
+
+    const { newChats } = await getAdminStats(db, now);
+    expect(newChats).toEqual({ day: 2, week: 3, month: 3 });
+  });
+
+  it("раскладывает по порогам только тех, кто получает алерты", async () => {
+    await addChat(1, "private");
+    await addChat(2, "private", 4);
+    await addChat(3, "private", 4);
+    await addChat(4, "private", 3);
+    await addChat(5, "private", 5);
+    await setSubscriptionActive(db, 5, false);
+
+    const { thresholds } = await getAdminStats(db, now);
+    expect(thresholds).toEqual([
+      { minMagnitude: 0, chats: 1 },
+      { minMagnitude: 3, chats: 1 },
+      { minMagnitude: 4, chats: 2 },
+    ]);
+  });
+
+  it("не считает отозванное событие ни последним, ни ждущим рассылки", async () => {
+    await insertIfNew(db, earthquake({ dedupeKey: "id:1", sourceTime: "2026-10-06T08:00:00.000Z" }));
+    await insertIfNew(db, earthquake({ dedupeKey: "id:2", sourceTime: "2026-10-06T09:00:00.000Z" }));
+    await insertIfNew(db, earthquake({ dedupeKey: "id:3", sourceTime: "2026-10-06T10:00:00.000Z" }));
+    const [first, second, third] = (await listWindow(db, "2026-10-06T00:00:00.000Z")).reverse();
+    await markNotified(db, first!.id);
+    await markRetracted(db, third!.id);
+    sqlite.prepare("UPDATE earthquake_event SET created_at = ? WHERE id = ?").run("2026-10-06 09:00:05", second!.id);
+    sqlite.prepare("UPDATE earthquake_event SET created_at = ? WHERE id <> ?").run("2026-10-06 08:00:05", second!.id);
+
+    const stats = await getAdminStats(db, now);
+    expect(stats.lastEventTime).toBe("2026-10-06T09:00:00.000Z");
+    expect(stats.lastRecordedAt).toBe("2026-10-06T09:00:05.000Z");
+    expect(stats.pendingAlerts).toBe(1);
   });
 });

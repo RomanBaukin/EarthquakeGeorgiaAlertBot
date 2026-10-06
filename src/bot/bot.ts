@@ -9,7 +9,7 @@ import { recentListMessage, settingsMessage, statsMessage } from "../templates/m
 import { texts } from "../templates/texts";
 import type { BotContext } from "./context";
 import { MENU_BUTTON_LABEL, removeReplyKeyboard } from "./keyboard";
-import { mainMenu, openMainMenu } from "./menus";
+import { adminMenu, adminPanelText, mainMenu, openMainMenu } from "./menus";
 
 function daysAgoIso(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -21,6 +21,10 @@ export function createBot(env: Env): Bot<BotContext> {
 
   bot.use(async (ctx, next) => {
     ctx.db = db;
+    ctx.isAdmin =
+      ctx.chat?.type === "private" &&
+      ctx.from !== undefined &&
+      env.ADMIN_IDS.includes(ctx.from.id);
     if (ctx.chat) {
       await upsertChat(db, {
         id: ctx.chat.id,
@@ -80,6 +84,16 @@ export function createBot(env: Env): Bot<BotContext> {
     await ctx.reply(statsMessage(computeStats(weekly), computeStats(monthly)), {
       parse_mode: "HTML",
       reply_markup: removeReplyKeyboard,
+    });
+  });
+
+  // Не-админу бот не отвечает вовсе, как на неизвестную команду: незачем
+  // сообщать, что админка существует. В /help её тоже нет.
+  bot.command("admin", async (ctx) => {
+    if (!ctx.isAdmin) return;
+    await ctx.reply(await adminPanelText(ctx), {
+      parse_mode: "HTML",
+      reply_markup: adminMenu,
     });
   });
 
